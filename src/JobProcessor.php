@@ -54,10 +54,51 @@ class JobProcessor
      */
     private function doAction(Job $job): array
     {
-        return [
-            'message' => 'Dummy runner executed successfully',
-            'plugin' => $job->plugin,
-            'src_exists' => is_dir($job->src),
-        ];
+        $result = [];
+
+        foreach(['stable', 'stable-readme'] as $project) {
+            $url = 'https://translate.wordpress.org/api/projects/wp-plugins/' . urlencode($job->plugin) . '/' . $project;
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($response === false) {
+                throw new \RuntimeException('Failed to fetch translation data: ' . $error);
+            }
+
+            if ($httpCode !== 200) {
+                throw new \RuntimeException('Translation API returned HTTP ' . $httpCode);
+            }
+
+            try {
+                $data = json_decode($response, true, flags: JSON_THROW_ON_ERROR);
+            } catch (Throwable $exception) {
+                throw new \RuntimeException('Translation API response is not valid JSON.', previous: $exception);
+            }
+
+            foreach ($data['translation_sets'] as $set) {
+                $locale = $set['locale'];
+
+                if (!isset($result[$locale])) {
+                    $result[$locale] = [];
+                }
+
+                $result[$locale][$project] = [
+                    'percentage' => $set['percent_translated'],
+                    'translated' => (int) $set['current_count'],
+                    'waiting' => (int) $set['waiting_count'],
+                    'total' => (int) $set['all_count'],
+                ];
+            }
+        }
+
+        return $result;
     }
 }
