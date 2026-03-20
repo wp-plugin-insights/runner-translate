@@ -62,6 +62,17 @@ composer install
 php bin/runner
 ```
 
+## Test without RabbitMQ
+
+You can process a single message directly from the command line:
+
+```bash
+mkdir -p /tmp/plugins/akismet
+echo '{"plugin":"akismet","src":"/tmp/plugins/akismet"}' | php bin/process-message
+```
+
+That prints the same payload shape the runner would publish back to RabbitMQ.
+
 ## Example input
 
 ```bash

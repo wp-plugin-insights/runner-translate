@@ -1,0 +1,28 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use WpPluginInsights\RunnerDummy\Config;
+use WpPluginInsights\RunnerDummy\JobProcessor;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$input = stream_get_contents(STDIN);
+
+if ($input === false || trim($input) === '') {
+    fwrite(STDERR, "Expected a JSON message on stdin.\n");
+    exit(1);
+}
+
+try {
+    $config = Config::fromEnvironment();
+    $processor = new JobProcessor($config);
+    $result = $processor->process($input);
+
+    fwrite(STDOUT, json_encode($result, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL);
+    exit(0);
+} catch (Throwable $exception) {
+    fwrite(STDERR, $exception->getMessage() . PHP_EOL);
+    exit(1);
+}

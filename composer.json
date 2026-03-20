@@ -13,6 +13,7 @@
     }
   },
   "bin": [
-    "bin/runner"
+    "bin/runner",
+    "bin/process-message"
   ]
 }

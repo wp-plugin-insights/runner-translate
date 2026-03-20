@@ -12,12 +12,14 @@ use Throwable;
 class Runner
 {
     private readonly ReportPublisher $reportPublisher;
+    private readonly JobProcessor $jobProcessor;
 
     public function __construct(
         private readonly AMQPChannel $channel,
         private readonly Config $config
     ) {
         $this->reportPublisher = new ReportPublisher($channel, $config);
+        $this->jobProcessor = new JobProcessor($config);
     }
 
     public function consume(): void
@@ -37,17 +39,15 @@ class Runner
 
     private function handleMessage(AMQPMessage $message): void
     {
-        $receivedAt = gmdate(DATE_ATOM);
-
         try {
-            $job = $this->parseJob($message->getBody());
-            $report = $this->buildDummyReport($job);
+            $payload = $this->jobProcessor->process($message->getBody());
+            $job = new Job($payload['plugin'], $payload['src']);
 
             $this->reportPublisher->publish(
                 $job,
-                $report,
-                $receivedAt,
-                gmdate(DATE_ATOM)
+                $payload['report'],
+                $payload['received_at'],
+                $payload['completed_at']
             );
 
             $message->ack();
@@ -58,32 +58,5 @@ class Runner
             fwrite(STDERR, sprintf("[runner] runtime failure: %s\n", $exception->getMessage()));
             $message->nack(false, true);
         }
-    }
-
-    private function parseJob(string $body): Job
-    {
-        try {
-            $payload = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
-        } catch (Throwable $exception) {
-            throw new InvalidArgumentException('Message body is not valid JSON.', previous: $exception);
-        }
-
-        if (!is_array($payload)) {
-            throw new InvalidArgumentException('Message body must decode to a JSON object.');
-        }
-
-        return Job::fromArray($payload);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildDummyReport(Job $job): array
-    {
-        return [
-            'message' => 'Dummy runner executed successfully',
-            'plugin' => $job->plugin,
-            'src_exists' => is_dir($job->src),
-        ];
     }
 }
