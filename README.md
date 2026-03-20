@@ -73,6 +73,12 @@ echo '{"plugin":"akismet","src":"/tmp/plugins/akismet"}' | php bin/process-messa
 
 That prints the same payload shape the runner would publish back to RabbitMQ.
 
+If you get a missing `vendor/autoload.php` error, run:
+
+```bash
+composer install
+```
+
 ## Example input
 
 ```bash
