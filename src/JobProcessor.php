@@ -26,7 +26,7 @@ class JobProcessor
             'runner' => $this->config->runnerName,
             'plugin' => $job->plugin,
             'src' => $job->src,
-            'report' => $this->buildDummyReport($job),
+            'report' => $this->doAction($job),
             'received_at' => $receivedAt,
             'completed_at' => gmdate(DATE_ATOM),
         ];
@@ -50,7 +50,7 @@ class JobProcessor
     /**
      * @return array<string, mixed>
      */
-    private function buildDummyReport(Job $job): array
+    private function doAction(Job $job): array
     {
         return [
             'message' => 'Dummy runner executed successfully',
