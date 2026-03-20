@@ -49,6 +49,7 @@ Only the `report` property is intended to be runner-specific for now.
 
 - Consumes from `RABBITMQ_INPUT_QUEUE`
 - Publishes reports to `RABBITMQ_REPORT_EXCHANGE`
+- Publishes with the shared routing key `runner-report`
 - Uses manual acknowledgements
 - Rejects invalid JSON or missing fields without requeueing
 - Requeues on unexpected runtime failures

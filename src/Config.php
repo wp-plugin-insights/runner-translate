@@ -16,7 +16,6 @@ class Config
         public readonly string $rabbitMqVhost,
         public readonly string $inputQueue,
         public readonly string $reportExchange,
-        public readonly string $reportRoutingKey,
         public readonly string $runnerName
     ) {
     }
@@ -34,7 +33,6 @@ class Config
             rabbitMqVhost: self::env('RABBITMQ_VHOST', '/'),
             inputQueue: self::env('RABBITMQ_INPUT_QUEUE', 'plugin.analysis.runner-dummy'),
             reportExchange: self::env('RABBITMQ_REPORT_EXCHANGE', 'plugin.analysis.reports'),
-            reportRoutingKey: self::env('RABBITMQ_REPORT_ROUTING_KEY', 'runner-dummy.report'),
             runnerName: self::env('RUNNER_NAME', 'runner-dummy')
         );
     }
