@@ -9,6 +9,8 @@ use PhpAmqpLib\Message\AMQPMessage;
 
 class ReportPublisher
 {
+    private const REPORT_ROUTING_KEY = 'runner-report';
+
     public function __construct(
         private readonly AMQPChannel $channel,
         private readonly Config $config
@@ -40,7 +42,7 @@ class ReportPublisher
         $this->channel->basic_publish(
             $message,
             $this->config->reportExchange,
-            $this->config->reportRoutingKey
+            self::REPORT_ROUTING_KEY
         );
     }
 }
