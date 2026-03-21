@@ -9,6 +9,13 @@ use Throwable;
 
 class JobProcessor
 {
+    /**
+     * The main locales to evaluate translation quality against.
+     */
+    private const MAJOR_LOCALES = [
+        'de', 'fr', 'es', 'it', 'pt-br', 'ja', 'zh-cn', 'nl', 'ru', 'ko',
+    ];
+
     public function __construct(
         private readonly Config $config
     ) {
@@ -99,22 +106,19 @@ class JobProcessor
         return $this->build_report($result);
     }
 
-    private function build_report($result): array
+    private function build_report(array $result): array
     {
-        $complaintLocales = $this->getComplaintLocales($result);
+        $compliantLocales = $this->getCompliantLocales($result);
+        $score = $this->calculateScore($result, $compliantLocales);
 
         return [
-            'score' => [
-                'grade' => 'A',
-                'percentage' => 95,
-                'reasoning' => 'The plugin is well translated with 100% of strings translated and no major issues detected in the major languages.',
-            ],
+            'score' => $score,
             'metrics' => [
                 'detected' => count($result),
-                'complaints' => count($complaintLocales),
+                'complaints' => count($compliantLocales),
             ],
             'capabilities' => [
-                'supported_locales' => $complaintLocales,
+                'supported_locales' => $compliantLocales,
             ],
             "issues" => [
 
@@ -126,7 +130,7 @@ class JobProcessor
                 "supported_locales" => [
                     "type" => "list",
                     "label" => "Supported locales (80%+ translated)",
-                    "items" => $complaintLocales,
+                    "items" => $compliantLocales,
                     "display" => 'badges',
                 ],
                 "coverage_by_locale" => [
@@ -143,12 +147,90 @@ class JobProcessor
         ];
     }
 
-    private function getComplaintLocales(array $result): array
+    /**
+     * @param array<string, array<string, mixed>> $result
+     * @param array<string> $compliantLocales
+     * @return array{grade: string, percentage: float, reasoning: string}
+     */
+    private function calculateScore(array $result, array $compliantLocales): array
+    {
+        // Filter to only major locales that have translation data
+        $majorResults = array_filter(
+            $result,
+            fn(mixed $data, string $locale) => in_array($locale, self::MAJOR_LOCALES, true),
+            ARRAY_FILTER_USE_BOTH
+        );
+
+        $majorCompliant = array_filter(
+            $compliantLocales,
+            fn(string $locale) => in_array($locale, self::MAJOR_LOCALES, true)
+        );
+
+        if (count($majorResults) === 0) {
+            return [
+                'grade' => 'F',
+                'percentage' => 0.0,
+                'reasoning' => 'No translation data available for any of the major locales (' . implode(', ', self::MAJOR_LOCALES) . ').',
+            ];
+        }
+
+        $totalPercentage = 0.0;
+        foreach ($majorResults as $data) {
+            $totalPercentage += (float) $data['percentage'];
+        }
+
+        // Score is based on coverage of all major locales, not just those with data
+        $averagePercentage = round($totalPercentage / count(self::MAJOR_LOCALES), 2);
+        $compliantRatio = count($majorCompliant) / count(self::MAJOR_LOCALES) * 100;
+
+        $grade = match (true) {
+            $averagePercentage >= 90 && $compliantRatio >= 80 => 'A',
+            $averagePercentage >= 75 && $compliantRatio >= 60 => 'B',
+            $averagePercentage >= 50 && $compliantRatio >= 40 => 'C',
+            $averagePercentage >= 25 => 'D',
+            default => 'F',
+        };
+
+        $majorLocaleCount = count(self::MAJOR_LOCALES);
+        $majorDataCount = count($majorResults);
+        $majorCompliantCount = count($majorCompliant);
+
+        $reasoning = match ($grade) {
+            'A' => sprintf(
+                'The plugin is well translated with an average of %.1f%% coverage across %d major locales (%d of %d present), and %d out of %d are above 80%% translated.',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $majorCompliantCount, $majorLocaleCount
+            ),
+            'B' => sprintf(
+                'The plugin has good translation coverage with an average of %.1f%% across %d major locales (%d of %d present), but some still need improvement.',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+            ),
+            'C' => sprintf(
+                'The plugin has moderate translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Many need additional translations.',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+            ),
+            'D' => sprintf(
+                'The plugin has limited translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Most need significant work.',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+            ),
+            'F' => sprintf(
+                'The plugin has very poor translation coverage with an average of %.1f%% across %d major locales (%d of %d present).',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+            ),
+        };
+
+        return [
+            'grade' => $grade,
+            'percentage' => $averagePercentage,
+            'reasoning' => $reasoning,
+        ];
+    }
+
+    private function getCompliantLocales(array $result): array
     {
         $list = [];
 
         foreach ($result as $locale => $data) {
-            if ($data['percentage'] < 80) {
+            if ($data['percentage'] > 80) {
                 $list[] = $locale;
             }
         }
