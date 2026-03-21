@@ -69,7 +69,7 @@ You can process a single message directly from the command line:
 
 ```bash
 mkdir -p /tmp/plugins/akismet
-echo '{"plugin":"akismet","src":"/tmp/plugins/akismet"}' | php bin/process-message
+echo '{"plugin":"akismet","version":"1.0","source":"wordpress.org","src":"/tmp/plugins/akismet"}' | php bin/process-message
 ```
 
 That prints the same payload shape the runner would publish back to RabbitMQ.
@@ -84,6 +84,6 @@ composer install
 
 ```bash
 cat <<'JSON'
-{"plugin":"akismet","src":"/tmp/plugins/akismet"}
+{"plugin":"akismet","version":"1.0","source":"wordpress.org","src":"/tmp/plugins/akismet"}
 JSON
 ```

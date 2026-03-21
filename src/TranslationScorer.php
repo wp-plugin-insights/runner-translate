@@ -10,7 +10,7 @@ class TranslationScorer
      * The main locales to evaluate translation quality against.
      */
     private const MAJOR_LOCALES = [
-        'de', 'fr', 'es', 'it', 'pt-br', 'ja', 'zh-cn', 'nl', 'ru', 'ko',
+        'de_DE', 'fr_FR', 'es_ES', 'it_IT', 'pt_BR', 'ja', 'zh_CN', 'nl_NL', 'ru_RU', 'ko_KR',
     ];
 
     /**
@@ -24,24 +24,37 @@ class TranslationScorer
         $compliantLocales = $this->getCompliantLocales($locales);
 
         // Filter to only major locales that have translation data
+        // Match both 'de' and 'de-de' formats
         $majorResults = array_filter(
             $locales,
-            fn(mixed $data, string $locale) => in_array($locale, self::MAJOR_LOCALES, true),
+            fn(mixed $data, string $locale) => $this->isMajorLocale($locale),
             ARRAY_FILTER_USE_BOTH
         );
 
         $majorCompliant = array_filter(
             $compliantLocales,
-            fn(string $locale) => in_array($locale, self::MAJOR_LOCALES, true)
+            fn(string $locale) => $this->isMajorLocale($locale)
         );
 
         $nonMajorCompliant = array_filter(
             $compliantLocales,
-            fn(string $locale) => !in_array($locale, self::MAJOR_LOCALES, true)
+            fn(string $locale) => !$this->isMajorLocale($locale)
         );
 
-        $majorNonCompliant = array_diff(self::MAJOR_LOCALES, $majorCompliant);
-        $missingMajor = array_diff(self::MAJOR_LOCALES, array_keys($majorResults));
+        // Get base locale codes from found results (de-de → de)
+        $foundMajorBaseCodes = array_unique(array_map(
+            fn($locale) => explode('-', $locale)[0],
+            array_keys($majorResults)
+        ));
+
+        // Get base locale codes from compliant locales
+        $compliantMajorBaseCodes = array_unique(array_map(
+            fn($locale) => explode('-', $locale)[0],
+            $majorCompliant
+        ));
+
+        $majorNonCompliant = array_diff(self::MAJOR_LOCALES, $compliantMajorBaseCodes);
+        $missingMajor = array_diff(self::MAJOR_LOCALES, $foundMajorBaseCodes);
         $belowThreshold = array_diff($majorNonCompliant, $missingMajor);
 
         if (count($majorResults) === 0) {
@@ -138,5 +151,21 @@ class TranslationScorer
         }
 
         return $list;
+    }
+
+    /**
+     * Check if a locale is a major locale (handles both 'de' and 'de-de' formats).
+     *
+     * @param string $locale
+     * @return bool
+     */
+    private function isMajorLocale(string $locale): bool
+    {
+        // Normalize the locale code to base language (de-de → de)
+        $baseLocale = explode('-', $locale)[0];
+
+        // Check if either the full locale or base locale is in the major list
+        return in_array($locale, self::MAJOR_LOCALES, true) ||
+               in_array($baseLocale, self::MAJOR_LOCALES, true);
     }
 }
