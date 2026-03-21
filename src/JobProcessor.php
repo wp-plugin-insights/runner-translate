@@ -359,7 +359,7 @@ class JobProcessor
             ],
             metrics: [
                 'detected' => count($locales),
-                'complaints' => count($compliantLocales),
+                'compliant' => count($compliantLocales),
                 'untranslated_strings' => $untranslatedResult['count'],
                 'text_domain_consistency' => $textDomainValidation['consistency_score'],
                 'text_domain_valid' => $textDomainValidation['is_valid'],

@@ -113,7 +113,7 @@ EOF
 echo '{"plugin":"test-plugin","version":"1.0","source":"other","src":"/tmp/test-plugin"}' | php bin/process-message
 ```
 
-Scans local files. Should detect 7 issues across all severity levels.
+Scans local files. Should detect 6 issues: 2 high (wrong function usage), 2 medium (text domain mismatch, load hook), 1 low (missing context), 1 trivial (missing translator comment).
 
 ## Validators
 
