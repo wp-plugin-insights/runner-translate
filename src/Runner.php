@@ -53,6 +53,7 @@ class Runner
             );
 
             $message->ack();
+            sleep(10); // Sleep for 10 seconds to avoid overwhelming the system with too many messages at once
         } catch (InvalidArgumentException $exception) {
             fwrite(STDERR, sprintf("[runner] rejecting invalid job: %s\n", $exception->getMessage()));
             $message->reject(false);
