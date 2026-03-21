@@ -3,7 +3,7 @@
 
 declare(strict_types=1);
 
-use WpPluginInsights\RunnerDummy\Application;
+use WpPluginInsights\RunnerTranslate\Application;
 
 $autoload = __DIR__ . '/../vendor/autoload.php';
 

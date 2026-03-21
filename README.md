@@ -1,6 +1,6 @@
-# runner-dummy
+# runner-translate
 
-Minimal PHP RabbitMQ runner for the WordPress plugin insights hackathon.
+Minimal Translate runner for the WordPress plugin insights hackathon.
 
 ## Purpose
 
@@ -32,11 +32,11 @@ Each published message is JSON with:
 
 ```json
 {
-  "runner": "runner-dummy",
+  "runner": "runner-translate",
   "plugin": "akismet",
   "src": "/path/to/unpacked/plugin",
   "report": {
-    "message": "Dummy runner executed successfully"
+    "message": "Translate executed successfully"
   },
   "received_at": "2026-03-20T10:00:00+00:00",
   "completed_at": "2026-03-20T10:00:00+00:00"
@@ -57,7 +57,7 @@ Only the `report` property is intended to be runner-specific for now.
 ## Setup
 
 ```bash
-cd /Users/eriktorsner/src/wp-plugin-insights/runner-dummy
+cd /Users/eriktorsner/src/wp-plugin-insights/runner-translate
 cp .env.example .env
 composer install
 php bin/runner
@@ -87,8 +87,3 @@ cat <<'JSON'
 {"plugin":"akismet","src":"/tmp/plugins/akismet"}
 JSON
 ```
-
-## Notes
-
-- The runner currently does not inspect the plugin contents
-- The dummy `report` is intentionally tiny so the report contract can evolve later

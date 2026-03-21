@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace WpPluginInsights\RunnerDummy;
+namespace WpPluginInsights\RunnerTranslate;
 
 use InvalidArgumentException;
 use PhpAmqpLib\Channel\AMQPChannel;

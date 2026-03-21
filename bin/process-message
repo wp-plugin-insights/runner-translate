@@ -3,8 +3,8 @@
 
 declare(strict_types=1);
 
-use WpPluginInsights\RunnerDummy\Config;
-use WpPluginInsights\RunnerDummy\JobProcessor;
+use WpPluginInsights\RunnerTranslate\Config;
+use WpPluginInsights\RunnerTranslate\JobProcessor;
 
 $autoload = __DIR__ . '/../vendor/autoload.php';
 

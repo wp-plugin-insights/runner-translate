@@ -10,7 +10,7 @@
   },
   "autoload": {
     "psr-4": {
-      "WpPluginInsights\\RunnerDummy\\": "src/"
+      "WpPluginInsights\\RunnerTranslate\\": "src/"
     }
   },
   "bin": [

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace WpPluginInsights\RunnerDummy;
+namespace WpPluginInsights\RunnerTranslate;
 
 use Dotenv\Dotenv;
 
@@ -32,10 +32,10 @@ class Config
             rabbitMqUser: self::env('RABBITMQ_USER', 'guest'),
             rabbitMqPassword: self::env('RABBITMQ_PASSWORD', 'guest'),
             rabbitMqVhost: self::env('RABBITMQ_VHOST', '/'),
-            inputQueue: self::env('RABBITMQ_INPUT_QUEUE', 'plugin.analysis.runner-dummy'),
+            inputQueue: self::env('RABBITMQ_INPUT_QUEUE', 'plugin.analysis.runner-translate'),
             reportExchange: self::env('RABBITMQ_REPORT_EXCHANGE', 'plugin.analysis.reports'),
             runnerCategory: self::env('RUNNER_CATEGORY', 'basic'),
-            runnerName: self::env('RUNNER_NAME', 'runner-dummy')
+            runnerName: self::env('RUNNER_NAME', 'runner-translate')
         );
     }
 
