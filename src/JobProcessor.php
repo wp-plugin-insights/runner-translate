@@ -14,7 +14,8 @@ class JobProcessor
         private readonly ReportBuilder $reportBuilder = new ReportBuilder(),
         private readonly TranslationScorer $scorer = new TranslationScorer(),
         private readonly TranslationFileParser $fileParser = new TranslationFileParser(),
-        private readonly UntranslatedStringScanner $untranslatedScanner = new UntranslatedStringScanner()
+        private readonly UntranslatedStringScanner $untranslatedScanner = new UntranslatedStringScanner(),
+        private readonly TextDomainValidator $textDomainValidator = new TextDomainValidator()
     ) {
     }
 
@@ -77,6 +78,9 @@ class JobProcessor
         // Scan for untranslated user-facing strings
         $untranslatedResult = $this->untranslatedScanner->findUntranslatedStrings($job->src, $translatedStrings);
 
+        // Validate text domain usage
+        $textDomainValidation = $this->textDomainValidator->validate($job->src, $job->plugin);
+
         $compliantLocales = $this->scorer->getCompliantLocales($locales);
         $score = $this->scorer->calculateScore($locales);
 
@@ -96,9 +100,62 @@ class JobProcessor
         $issuesTrivial = 0;
         $topIssues = [];
 
+        // Text domain validation issues
+        if (!$textDomainValidation['is_valid']) {
+            $isWordPressOrg = $job->source === 'wordpress.org';
+
+            foreach ($textDomainValidation['issues'] as $issue) {
+                // Classify by severity
+                if (strpos($issue, 'No text domain declared') !== false) {
+                    // High for wordpress.org, medium for others
+                    if ($isWordPressOrg) {
+                        $issuesHigh++;
+                        $severity = 'high';
+                    } else {
+                        $issuesMedium++;
+                        $severity = 'medium';
+                    }
+                } elseif (strpos($issue, 'does not match plugin slug') !== false) {
+                    // High for wordpress.org, medium for others
+                    if ($isWordPressOrg) {
+                        $issuesHigh++;
+                        $severity = 'high';
+                    } else {
+                        $issuesMedium++;
+                        $severity = 'medium';
+                    }
+                } elseif (strpos($issue, 'Multiple text domains') !== false) {
+                    $issuesMedium++;
+                    $severity = 'medium';
+                } elseif (strpos($issue, 'variable text domain') !== false) {
+                    $issuesMedium++;
+                    $severity = 'medium';
+                } else {
+                    $issuesLow++;
+                    $severity = 'low';
+                }
+
+                $topIssue = [
+                    'code' => 'i18n.text_domain',
+                    'message' => $issue,
+                    'severity' => $severity,
+                ];
+
+                // Add examples for specific issues
+                if (!empty($textDomainValidation['mismatches']) && strpos($issue, 'Only') !== false) {
+                    $topIssue['examples'] = array_slice($textDomainValidation['mismatches'], 0, 5);
+                } elseif (!empty($textDomainValidation['variable_domains']) && strpos($issue, 'variable') !== false) {
+                    $topIssue['examples'] = array_slice($textDomainValidation['variable_domains'], 0, 5);
+                }
+
+                $topIssues[] = $topIssue;
+            }
+        }
+
+        // Untranslated strings
         if ($untranslatedResult['count'] > 0) {
             // Count as low severity since they may not all be legitimate issues
-            $issuesLow = $untranslatedResult['count'];
+            $issuesLow += $untranslatedResult['count'];
 
             $topIssues[] = [
                 'code' => 'i18n.unwrapped_strings',
@@ -166,11 +223,14 @@ class JobProcessor
             details: [
                 'locales' => $locales,
                 'untranslated_strings' => $untranslatedResult,
+                'text_domain' => $textDomainValidation,
             ],
             metrics: [
                 'detected' => count($locales),
                 'complaints' => count($compliantLocales),
                 'untranslated_strings' => $untranslatedResult['count'],
+                'text_domain_consistency' => $textDomainValidation['consistency_score'],
+                'text_domain_valid' => $textDomainValidation['is_valid'],
             ],
             capabilities: [
                 'supported_locales' => $compliantLocales,
