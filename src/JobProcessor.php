@@ -166,6 +166,11 @@ class JobProcessor
             fn(string $locale) => in_array($locale, self::MAJOR_LOCALES, true)
         );
 
+        $nonMajorCompliant = array_filter(
+            $compliantLocales,
+            fn(string $locale) => !in_array($locale, self::MAJOR_LOCALES, true)
+        );
+
         $majorNonCompliant = array_diff(self::MAJOR_LOCALES, $majorCompliant);
         $missingMajor = array_diff(self::MAJOR_LOCALES, array_keys($majorResults));
         $belowThreshold = array_diff($majorNonCompliant, $missingMajor);
@@ -195,9 +200,15 @@ class JobProcessor
             default => 'F',
         };
 
+        // Promote to A+ when the plugin qualifies for A and has 20+ additional compliant locales beyond the major ones
+        if ($grade === 'A' && count($nonMajorCompliant) >= 20) {
+            $grade = 'A+';
+        }
+
         $majorLocaleCount = count(self::MAJOR_LOCALES);
         $majorDataCount = count($majorResults);
         $majorCompliantCount = count($majorCompliant);
+        $nonMajorCompliantCount = count($nonMajorCompliant);
 
         $issueDetail = '';
         if (count($belowThreshold) > 0) {
@@ -208,6 +219,10 @@ class JobProcessor
         }
 
         $reasoning = match ($grade) {
+            'A+' => sprintf(
+                'The plugin is exceptionally well translated with an average of %.1f%% coverage across %d major locales (%d of %d present), %d out of %d major locales are above 80%% translated, and %d additional locales also exceed 80%%.',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $majorCompliantCount, $majorLocaleCount, $nonMajorCompliantCount
+            ),
             'A' => sprintf(
                 'The plugin is well translated with an average of %.1f%% coverage across %d major locales (%d of %d present), and %d out of %d are above 80%% translated.',
                 $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $majorCompliantCount, $majorLocaleCount
