@@ -15,7 +15,8 @@ class JobProcessor
         private readonly TranslationScorer $scorer = new TranslationScorer(),
         private readonly TranslationFileParser $fileParser = new TranslationFileParser(),
         private readonly UntranslatedStringScanner $untranslatedScanner = new UntranslatedStringScanner(),
-        private readonly TextDomainValidator $textDomainValidator = new TextDomainValidator()
+        private readonly TextDomainValidator $textDomainValidator = new TextDomainValidator(),
+        private readonly JavaScriptI18nScanner $jsI18nScanner = new JavaScriptI18nScanner()
     ) {
     }
 
@@ -80,6 +81,9 @@ class JobProcessor
 
         // Validate text domain usage
         $textDomainValidation = $this->textDomainValidator->validate($job->src, $job->plugin);
+
+        // Scan JavaScript files for i18n
+        $jsI18nResult = $this->jsI18nScanner->scan($job->src, $textDomainValidation['declared']);
 
         $compliantLocales = $this->scorer->getCompliantLocales($locales);
         $score = $this->scorer->calculateScore($locales);
@@ -170,6 +174,49 @@ class JobProcessor
             ];
         }
 
+        // JavaScript i18n issues
+        if ($jsI18nResult['has_js_files']) {
+            // Missing wp_set_script_translations
+            if ($jsI18nResult['has_translations'] && empty($jsI18nResult['script_registrations'])) {
+                $issuesMedium++;
+                $topIssues[] = [
+                    'code' => 'i18n.js_no_registration',
+                    'message' => 'JavaScript translations found but no wp_set_script_translations() calls',
+                    'severity' => 'medium',
+                ];
+            }
+
+            // JavaScript text domain issues
+            if (!empty($jsI18nResult['text_domain_issues'])) {
+                $issuesLow += count($jsI18nResult['text_domain_issues']);
+                $topIssues[] = [
+                    'code' => 'i18n.js_wrong_domain',
+                    'message' => sprintf(
+                        '%d JavaScript translation%s using wrong text domain',
+                        count($jsI18nResult['text_domain_issues']),
+                        count($jsI18nResult['text_domain_issues']) === 1 ? '' : 's'
+                    ),
+                    'severity' => 'low',
+                    'examples' => array_slice($jsI18nResult['text_domain_issues'], 0, 5),
+                ];
+            }
+
+            // Untranslated JavaScript strings
+            if (!empty($jsI18nResult['untranslated_strings'])) {
+                $issuesTrivial += count($jsI18nResult['untranslated_strings']);
+                $topIssues[] = [
+                    'code' => 'i18n.js_unwrapped_strings',
+                    'message' => sprintf(
+                        '%d JavaScript string%s may need translation',
+                        count($jsI18nResult['untranslated_strings']),
+                        count($jsI18nResult['untranslated_strings']) === 1 ? '' : 's'
+                    ),
+                    'severity' => 'trivial',
+                    'examples' => array_slice($jsI18nResult['untranslated_strings'], 0, 5),
+                ];
+            }
+        }
+
         $issues = [
             'high' => $issuesHigh,
             'medium' => $issuesMedium,
@@ -224,6 +271,7 @@ class JobProcessor
                 'locales' => $locales,
                 'untranslated_strings' => $untranslatedResult,
                 'text_domain' => $textDomainValidation,
+                'javascript_i18n' => $jsI18nResult,
             ],
             metrics: [
                 'detected' => count($locales),
@@ -231,6 +279,9 @@ class JobProcessor
                 'untranslated_strings' => $untranslatedResult['count'],
                 'text_domain_consistency' => $textDomainValidation['consistency_score'],
                 'text_domain_valid' => $textDomainValidation['is_valid'],
+                'js_has_translations' => $jsI18nResult['has_translations'],
+                'js_total_strings' => $jsI18nResult['total_js_strings'],
+                'js_translated' => $jsI18nResult['total_translated'],
             ],
             capabilities: [
                 'supported_locales' => $compliantLocales,
