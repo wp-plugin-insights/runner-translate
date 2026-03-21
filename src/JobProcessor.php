@@ -89,22 +89,37 @@ class JobProcessor
             ];
         }
 
-        // Build issues array
-        $issues = [];
+        // Build issues object
+        $issuesHigh = 0;
+        $issuesMedium = 0;
+        $issuesLow = 0;
+        $issuesTrivial = 0;
+        $topIssues = [];
+
         if ($untranslatedResult['count'] > 0) {
-            $issues[] = [
-                'type' => 'untranslated_strings',
-                'severity' => 'warning',
+            // Count as low severity since they may not all be legitimate issues
+            $issuesLow = $untranslatedResult['count'];
+
+            $topIssues[] = [
+                'code' => 'i18n.unwrapped_strings',
                 'message' => sprintf(
-                    'Found %d user-facing string%s that should be translatable but %s not wrapped in translation functions.',
+                    '%d string%s %s not translatable',
                     $untranslatedResult['count'],
                     $untranslatedResult['count'] === 1 ? '' : 's',
                     $untranslatedResult['count'] === 1 ? 'is' : 'are'
                 ),
-                'count' => $untranslatedResult['count'],
-                'examples' => array_slice($untranslatedResult['strings'], 0, 5), // Show first 5 examples
+                'severity' => 'low',
+                'examples' => array_slice($untranslatedResult['strings'], 0, 5),
             ];
         }
+
+        $issues = [
+            'high' => $issuesHigh,
+            'medium' => $issuesMedium,
+            'low' => $issuesLow,
+            'trivial' => $issuesTrivial,
+            'top' => $topIssues,
+        ];
 
         $presentation = [
             'supported_locales' => $this->reportBuilder->createList(
