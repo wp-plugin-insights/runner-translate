@@ -135,7 +135,7 @@ class TranslationScorer
         $list = [];
 
         foreach ($locales as $locale => $data) {
-            if ($data['percentage'] > 80) {
+            if ($data['percentage'] >= 80) {
                 $list[] = $locale;
             }
         }
