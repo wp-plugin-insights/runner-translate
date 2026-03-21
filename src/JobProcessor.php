@@ -58,9 +58,12 @@ class JobProcessor
     {
         // Only fetch translation data for plugins from wordpress.org
         if ($job->source !== 'wordpress.org') {
-            $score = $this->scorer->calculateScore([]);
             return $this->reportBuilder->build(
-                score: $score,
+                score: [
+                    'grade' => 'N/A',
+                    'percentage' => 0.0,
+                    'reasoning' => 'Translation data is only available for plugins hosted on wordpress.org.',
+                ],
                 details: ['locales' => []],
                 metrics: ['detected' => 0, 'complaints' => 0],
                 capabilities: ['supported_locales' => []],
