@@ -166,6 +166,10 @@ class JobProcessor
             fn(string $locale) => in_array($locale, self::MAJOR_LOCALES, true)
         );
 
+        $majorNonCompliant = array_diff(self::MAJOR_LOCALES, $majorCompliant);
+        $missingMajor = array_diff(self::MAJOR_LOCALES, array_keys($majorResults));
+        $belowThreshold = array_diff($majorNonCompliant, $missingMajor);
+
         if (count($majorResults) === 0) {
             return [
                 'grade' => 'F',
@@ -195,26 +199,34 @@ class JobProcessor
         $majorDataCount = count($majorResults);
         $majorCompliantCount = count($majorCompliant);
 
+        $issueDetail = '';
+        if (count($belowThreshold) > 0) {
+            $issueDetail .= ' Locales below 80%: ' . implode(', ', array_values($belowThreshold)) . '.';
+        }
+        if (count($missingMajor) > 0) {
+            $issueDetail .= ' Missing locales: ' . implode(', ', array_values($missingMajor)) . '.';
+        }
+
         $reasoning = match ($grade) {
             'A' => sprintf(
                 'The plugin is well translated with an average of %.1f%% coverage across %d major locales (%d of %d present), and %d out of %d are above 80%% translated.',
                 $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $majorCompliantCount, $majorLocaleCount
             ),
             'B' => sprintf(
-                'The plugin has good translation coverage with an average of %.1f%% across %d major locales (%d of %d present), but some still need improvement.',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+                'The plugin has good translation coverage with an average of %.1f%% across %d major locales (%d of %d present), but some still need improvement.%s',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
             ),
             'C' => sprintf(
-                'The plugin has moderate translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Many need additional translations.',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+                'The plugin has moderate translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Many need additional translations.%s',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
             ),
             'D' => sprintf(
-                'The plugin has limited translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Most need significant work.',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+                'The plugin has limited translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Most need significant work.%s',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
             ),
             'F' => sprintf(
-                'The plugin has very poor translation coverage with an average of %.1f%% across %d major locales (%d of %d present).',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount
+                'The plugin has very poor translation coverage with an average of %.1f%% across %d major locales (%d of %d present).%s',
+                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
             ),
         };
 
