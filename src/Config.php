@@ -35,7 +35,7 @@ class Config
             inputQueue: self::env('RABBITMQ_INPUT_QUEUE', 'plugin.analysis.runner-translate'),
             reportExchange: self::env('RABBITMQ_REPORT_EXCHANGE', 'plugin.analysis.reports'),
             runnerCategory: self::env('RUNNER_CATEGORY', 'basic'),
-            runnerName: self::env('RUNNER_NAME', 'runner-translate')
+            runnerName: self::env('RUNNER_NAME', 'translate')
         );
     }
 
