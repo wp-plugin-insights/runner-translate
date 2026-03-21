@@ -24,7 +24,6 @@ class TranslationScorer
         $compliantLocales = $this->getCompliantLocales($locales);
 
         // Filter to only major locales that have translation data
-        // Match both 'de' and 'de-de' formats
         $majorResults = array_filter(
             $locales,
             fn(mixed $data, string $locale) => $this->isMajorLocale($locale),
@@ -41,20 +40,11 @@ class TranslationScorer
             fn(string $locale) => !$this->isMajorLocale($locale)
         );
 
-        // Get base locale codes from found results (de-de → de)
-        $foundMajorBaseCodes = array_unique(array_map(
-            fn($locale) => explode('-', $locale)[0],
-            array_keys($majorResults)
-        ));
+        // Get the found major locale codes
+        $foundMajorLocales = array_keys($majorResults);
 
-        // Get base locale codes from compliant locales
-        $compliantMajorBaseCodes = array_unique(array_map(
-            fn($locale) => explode('-', $locale)[0],
-            $majorCompliant
-        ));
-
-        $majorNonCompliant = array_diff(self::MAJOR_LOCALES, $compliantMajorBaseCodes);
-        $missingMajor = array_diff(self::MAJOR_LOCALES, $foundMajorBaseCodes);
+        $majorNonCompliant = array_diff(self::MAJOR_LOCALES, $majorCompliant);
+        $missingMajor = array_diff(self::MAJOR_LOCALES, $foundMajorLocales);
         $belowThreshold = array_diff($majorNonCompliant, $missingMajor);
 
         if (count($majorResults) === 0) {
@@ -154,18 +144,20 @@ class TranslationScorer
     }
 
     /**
-     * Check if a locale is a major locale (handles both 'de' and 'de-de' formats).
+     * Check if a locale is a major locale.
      *
      * @param string $locale
      * @return bool
      */
     private function isMajorLocale(string $locale): bool
     {
-        // Normalize the locale code to base language (de-de → de)
-        $baseLocale = explode('-', $locale)[0];
+        // Check if the locale is directly in the major list
+        if (in_array($locale, self::MAJOR_LOCALES, true)) {
+            return true;
+        }
 
-        // Check if either the full locale or base locale is in the major list
-        return in_array($locale, self::MAJOR_LOCALES, true) ||
-               in_array($baseLocale, self::MAJOR_LOCALES, true);
+        // Also check base language code (de_DE → de, ja → ja)
+        $baseLocale = explode('_', $locale)[0];
+        return in_array($baseLocale, self::MAJOR_LOCALES, true);
     }
 }

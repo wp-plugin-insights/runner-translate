@@ -6,6 +6,11 @@ namespace WpPluginInsights\RunnerTranslate;
 
 class TranslationFileParser
 {
+    public function __construct(
+        private readonly TranslatableStringScanner $scanner = new TranslatableStringScanner()
+    ) {
+    }
+
     /**
      * Scan a plugin directory for translation files and extract locale data.
      *
@@ -28,14 +33,6 @@ class TranslationFileParser
             return $locales;
         }
 
-        $potFile = null;
-
-        // Find .pot file (template with all strings)
-        $potFiles = glob($registeredPath . '/*.pot');
-        if (!empty($potFiles)) {
-            $potFile = $potFiles[0];
-        }
-
         // Find all .po files (language-specific translations)
         $poFiles = glob($registeredPath . '/*.po');
 
@@ -43,8 +40,19 @@ class TranslationFileParser
             return $locales;
         }
 
-        // Get total strings count from .pot file
-        $totalStrings = $potFile ? $this->countStringsInPotFile($potFile) : null;
+        // Get text domain from plugin code
+        $textDomain = $this->findTextDomain($pluginPath);
+
+        // Count actual translatable strings from PHP code
+        $totalStrings = $this->scanner->countTranslatableStrings($pluginPath, $textDomain);
+
+        // If scanning failed, fallback to .pot file count
+        if ($totalStrings === 0) {
+            $potFiles = glob($registeredPath . '/*.pot');
+            if (!empty($potFiles)) {
+                $totalStrings = $this->countStringsInPotFile($potFiles[0]);
+            }
+        }
 
         // Parse each .po file
         foreach ($poFiles as $poFile) {
@@ -55,8 +63,8 @@ class TranslationFileParser
 
             $stats = $this->parsePoFile($poFile);
 
-            // If we don't have a .pot file, use the total from .po file
-            $total = $totalStrings ?? $stats['total'];
+            // Use actual count from code, or fallback to .po file total
+            $total = $totalStrings > 0 ? $totalStrings : $stats['total'];
             $percentage = $total > 0 ? round(($stats['translated'] / $total) * 100, 2) : 0;
 
             $locales[$locale] = [
@@ -69,6 +77,52 @@ class TranslationFileParser
         }
 
         return $locales;
+    }
+
+    /**
+     * Find the text domain from plugin PHP files.
+     *
+     * @param string $pluginPath
+     * @return string|null
+     */
+    private function findTextDomain(string $pluginPath): ?string
+    {
+        $phpFiles = $this->findPhpFiles($pluginPath);
+
+        foreach ($phpFiles as $phpFile) {
+            $content = @file_get_contents($phpFile);
+            if ($content === false) {
+                continue;
+            }
+
+            // Look for load_plugin_textdomain calls
+            if (preg_match('/load_plugin_textdomain\s*\(/is', $content, $startMatch, PREG_OFFSET_CAPTURE)) {
+                $startPos = $startMatch[0][1] + strlen($startMatch[0][0]);
+                $call = $this->extractBalancedParentheses($content, $startPos);
+
+                if ($call !== null) {
+                    $params = $this->splitParameters($call);
+
+                    if (!empty($params)) {
+                        // First parameter is the text domain
+                        $textDomain = trim($params[0], " \t\n\r\0\x0B\"'");
+                        if (!empty($textDomain)) {
+                            return $textDomain;
+                        }
+                    }
+                }
+            }
+
+            // Also check plugin header
+            if (preg_match('/^\s*\*\s*Text Domain:\s*(.+)$/im', $content, $match)) {
+                $textDomain = trim($match[1]);
+                if (!empty($textDomain)) {
+                    return $textDomain;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -313,7 +367,7 @@ class TranslationFileParser
     }
 
     /**
-     * Extract locale code from a .po filename.
+     * Extract locale code from a .po filename in WordPress format.
      *
      * @param string $filename
      * @return string|null
@@ -322,20 +376,22 @@ class TranslationFileParser
     {
         $basename = basename($filename, '.po');
 
-        // Common patterns:
+        // Common patterns (WordPress format uses underscores):
         // plugin-name-en_US.po
-        // plugin-name-en.po
+        // plugin-name-de_DE.po
+        // plugin-name-pt_BR.po
         // en_US.po
-        // en.po
+        // de_DE.po
+        // ja.po (single locale)
 
-        // Try to match locale pattern
-        if (preg_match('/[_-]([a-z]{2}(?:[_-][A-Z]{2})?)$/', $basename, $matches)) {
-            return str_replace('_', '-', strtolower($matches[1]));
+        // Try to match locale pattern: 2-letter language code, optionally followed by underscore and 2-letter country code
+        if (preg_match('/[_-]([a-z]{2}(?:_[A-Z]{2})?)$/', $basename, $matches)) {
+            return $matches[1];
         }
 
         // If the basename itself is a locale
-        if (preg_match('/^([a-z]{2}(?:[_-][A-Z]{2})?)$/', $basename, $matches)) {
-            return str_replace('_', '-', strtolower($matches[1]));
+        if (preg_match('/^([a-z]{2}(?:_[A-Z]{2})?)$/', $basename, $matches)) {
+            return $matches[1];
         }
 
         return null;
@@ -359,146 +415,146 @@ class TranslationFileParser
             'az' => 'Azerbaijani',
             'azb' => 'South Azerbaijani',
             'bel' => 'Belarusian',
-            'bg-bg' => 'Bulgarian',
-            'bn-bd' => 'Bengali (Bangladesh)',
+            'bg_BG' => 'Bulgarian',
+            'bn_BD' => 'Bengali (Bangladesh)',
             'bo' => 'Tibetan',
-            'bs-ba' => 'Bosnian',
+            'bs_BA' => 'Bosnian',
             'ca' => 'Catalan',
             'ceb' => 'Cebuano',
             'ckb' => 'Kurdish (Sorani)',
             'co' => 'Corsican',
-            'cs-cz' => 'Czech',
+            'cs_CZ' => 'Czech',
             'cy' => 'Welsh',
-            'da-dk' => 'Danish',
-            'de-at' => 'German (Austria)',
-            'de-ch' => 'German (Switzerland)',
-            'de-ch-informal' => 'German (Switzerland, Informal)',
-            'de-de' => 'German',
-            'de-de-formal' => 'German (Formal)',
+            'da_DK' => 'Danish',
+            'de_AT' => 'German (Austria)',
+            'de_CH' => 'German (Switzerland)',
+            'de_CH_informal' => 'German (Switzerland, Informal)',
+            'de_DE' => 'German',
+            'de_DE_formal' => 'German (Formal)',
             'dsb' => 'Lower Sorbian',
             'dzo' => 'Dzongkha',
             'el' => 'Greek',
-            'en-au' => 'English (Australia)',
-            'en-ca' => 'English (Canada)',
-            'en-gb' => 'English (UK)',
-            'en-nz' => 'English (New Zealand)',
-            'en-za' => 'English (South Africa)',
+            'en_AU' => 'English (Australia)',
+            'en_CA' => 'English (Canada)',
+            'en_GB' => 'English (UK)',
+            'en_NZ' => 'English (New Zealand)',
+            'en_ZA' => 'English (South Africa)',
             'eo' => 'Esperanto',
-            'es-ar' => 'Spanish (Argentina)',
-            'es-cl' => 'Spanish (Chile)',
-            'es-co' => 'Spanish (Colombia)',
-            'es-cr' => 'Spanish (Costa Rica)',
-            'es-do' => 'Spanish (Dominican Republic)',
-            'es-ec' => 'Spanish (Ecuador)',
-            'es-es' => 'Spanish (Spain)',
-            'es-gt' => 'Spanish (Guatemala)',
-            'es-hn' => 'Spanish (Honduras)',
-            'es-mx' => 'Spanish (Mexico)',
-            'es-pe' => 'Spanish (Peru)',
-            'es-pr' => 'Spanish (Puerto Rico)',
-            'es-py' => 'Spanish (Paraguay)',
-            'es-uy' => 'Spanish (Uruguay)',
-            'es-ve' => 'Spanish (Venezuela)',
+            'es_AR' => 'Spanish (Argentina)',
+            'es_CL' => 'Spanish (Chile)',
+            'es_CO' => 'Spanish (Colombia)',
+            'es_CR' => 'Spanish (Costa Rica)',
+            'es_DO' => 'Spanish (Dominican Republic)',
+            'es_EC' => 'Spanish (Ecuador)',
+            'es_ES' => 'Spanish (Spain)',
+            'es_GT' => 'Spanish (Guatemala)',
+            'es_HN' => 'Spanish (Honduras)',
+            'es_MX' => 'Spanish (Mexico)',
+            'es_PE' => 'Spanish (Peru)',
+            'es_PR' => 'Spanish (Puerto Rico)',
+            'es_PY' => 'Spanish (Paraguay)',
+            'es_UY' => 'Spanish (Uruguay)',
+            'es_VE' => 'Spanish (Venezuela)',
             'et' => 'Estonian',
             'eu' => 'Basque',
-            'fa-af' => 'Persian (Afghanistan)',
-            'fa-ir' => 'Persian',
+            'fa_AF' => 'Persian (Afghanistan)',
+            'fa_IR' => 'Persian',
             'fi' => 'Finnish',
             'fo' => 'Faroese',
-            'fr-be' => 'French (Belgium)',
-            'fr-ca' => 'French (Canada)',
-            'fr-fr' => 'French (France)',
+            'fr_BE' => 'French (Belgium)',
+            'fr_CA' => 'French (Canada)',
+            'fr_FR' => 'French (France)',
             'fur' => 'Friulian',
             'fy' => 'Frisian',
             'ga' => 'Irish',
             'gd' => 'Scottish Gaelic',
-            'gl-es' => 'Galician',
+            'gl_ES' => 'Galician',
             'gn' => 'Guaraní',
             'gu' => 'Gujarati',
             'ha' => 'Hausa',
             'hau' => 'Hausa',
             'haz' => 'Hazaragi',
-            'he-il' => 'Hebrew',
-            'hi-in' => 'Hindi',
+            'he_IL' => 'Hebrew',
+            'hi_IN' => 'Hindi',
             'hr' => 'Croatian',
             'hsb' => 'Upper Sorbian',
-            'hu-hu' => 'Hungarian',
+            'hu_HU' => 'Hungarian',
             'hy' => 'Armenian',
-            'id-id' => 'Indonesian',
-            'is-is' => 'Icelandic',
-            'it-it' => 'Italian',
+            'id_ID' => 'Indonesian',
+            'is_IS' => 'Icelandic',
+            'it_IT' => 'Italian',
             'ja' => 'Japanese',
-            'jv-id' => 'Javanese',
-            'ka-ge' => 'Georgian',
+            'jv_ID' => 'Javanese',
+            'ka_GE' => 'Georgian',
             'kab' => 'Kabyle',
             'kk' => 'Kazakh',
             'km' => 'Khmer',
             'kn' => 'Kannada',
-            'ko-kr' => 'Korean',
+            'ko_KR' => 'Korean',
             'ku' => 'Kurdish (Kurmanji)',
-            'ky-ky' => 'Kirghiz',
-            'lb-lu' => 'Luxembourgish',
+            'ky_KY' => 'Kirghiz',
+            'lb_LU' => 'Luxembourgish',
             'lo' => 'Lao',
-            'lt-lt' => 'Lithuanian',
+            'lt_LT' => 'Lithuanian',
             'lv' => 'Latvian',
-            'mg-mg' => 'Malagasy',
-            'mk-mk' => 'Macedonian',
-            'ml-in' => 'Malayalam',
+            'mg_MG' => 'Malagasy',
+            'mk_MK' => 'Macedonian',
+            'ml_IN' => 'Malayalam',
             'mn' => 'Mongolian',
             'mr' => 'Marathi',
-            'ms-my' => 'Malay',
-            'my-mm' => 'Myanmar (Burmese)',
-            'nb-no' => 'Norwegian (Bokmål)',
-            'ne-np' => 'Nepali',
-            'nl-be' => 'Dutch (Belgium)',
-            'nl-nl' => 'Dutch',
-            'nl-nl-formal' => 'Dutch (Formal)',
-            'nn-no' => 'Norwegian (Nynorsk)',
+            'ms_MY' => 'Malay',
+            'my_MM' => 'Myanmar (Burmese)',
+            'nb_NO' => 'Norwegian (Bokmål)',
+            'ne_NP' => 'Nepali',
+            'nl_BE' => 'Dutch (Belgium)',
+            'nl_NL' => 'Dutch',
+            'nl_NL_formal' => 'Dutch (Formal)',
+            'nn_NO' => 'Norwegian (Nynorsk)',
             'oci' => 'Occitan',
             'or' => 'Oriya',
             'os' => 'Ossetic',
-            'pa-in' => 'Punjabi',
-            'pl-pl' => 'Polish',
+            'pa_IN' => 'Punjabi',
+            'pl_PL' => 'Polish',
             'ps' => 'Pashto',
-            'pt-ao' => 'Portuguese (Angola)',
-            'pt-br' => 'Portuguese (Brazil)',
-            'pt-pt' => 'Portuguese (Portugal)',
-            'pt-pt-ao90' => 'Portuguese (Portugal, AO90)',
+            'pt_AO' => 'Portuguese (Angola)',
+            'pt_BR' => 'Portuguese (Brazil)',
+            'pt_PT' => 'Portuguese (Portugal)',
+            'pt_PT_ao90' => 'Portuguese (Portugal, AO90)',
             'rhg' => 'Rohingya',
-            'ro-ro' => 'Romanian',
-            'ru-ru' => 'Russian',
+            'ro_RO' => 'Romanian',
+            'ru_RU' => 'Russian',
             'sah' => 'Sakha',
             'scn' => 'Sicilian',
-            'sd-pk' => 'Sindhi',
-            'si-lk' => 'Sinhala',
-            'sk-sk' => 'Slovak',
+            'sd_PK' => 'Sindhi',
+            'si_LK' => 'Sinhala',
+            'sk_SK' => 'Slovak',
             'skr' => 'Saraiki',
-            'sl-si' => 'Slovenian',
+            'sl_SI' => 'Slovenian',
             'sna' => 'Shona',
             'sq' => 'Albanian',
-            'sr-rs' => 'Serbian',
-            'sv-se' => 'Swedish',
+            'sr_RS' => 'Serbian',
+            'sv_SE' => 'Swedish',
             'sw' => 'Swahili',
             'szl' => 'Silesian',
-            'ta-in' => 'Tamil',
-            'ta-lk' => 'Tamil (Sri Lanka)',
+            'ta_IN' => 'Tamil',
+            'ta_LK' => 'Tamil (Sri Lanka)',
             'tah' => 'Tahitian',
             'te' => 'Telugu',
             'th' => 'Thai',
             'tl' => 'Tagalog',
-            'tr-tr' => 'Turkish',
-            'tt-ru' => 'Tatar',
+            'tr_TR' => 'Turkish',
+            'tt_RU' => 'Tatar',
             'tuk' => 'Turkmen',
-            'ug-cn' => 'Uighur',
+            'ug_CN' => 'Uighur',
             'uk' => 'Ukrainian',
             'ur' => 'Urdu',
-            'uz-uz' => 'Uzbek',
+            'uz_UZ' => 'Uzbek',
             'vi' => 'Vietnamese',
-            'zh-cn' => 'Chinese (China)',
-            'zh-hk' => 'Chinese (Hong Kong)',
-            'zh-tw' => 'Chinese (Taiwan)',
+            'zh_CN' => 'Chinese (China)',
+            'zh_HK' => 'Chinese (Hong Kong)',
+            'zh_TW' => 'Chinese (Taiwan)',
         ];
 
-        return $names[$locale] ?? ucfirst(str_replace('-', ' ', $locale));
+        return $names[$locale] ?? ucfirst(str_replace('_', ' ', $locale));
     }
 }
