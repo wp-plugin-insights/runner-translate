@@ -37,8 +37,20 @@ class TranslatableStringScanner
      */
     public function countTranslatableStrings(string $pluginPath, ?string $textDomain = null): int
     {
+        return count($this->extractTranslatableStrings($pluginPath, $textDomain));
+    }
+
+    /**
+     * Extract all translatable strings from a plugin directory.
+     *
+     * @param string $pluginPath
+     * @param string|null $textDomain
+     * @return array<string>
+     */
+    public function extractTranslatableStrings(string $pluginPath, ?string $textDomain = null): array
+    {
         if (!is_dir($pluginPath)) {
-            return 0;
+            return [];
         }
 
         $phpFiles = $this->findPhpFiles($pluginPath);
@@ -70,7 +82,7 @@ class TranslatableStringScanner
 
                             // Extract the translatable string
                             $string = $this->extractString($parsedParams, $function);
-                            if ($string !== null) {
+                            if ($string !== null && trim($string) !== '') {
                                 $strings[$string] = true; // Use array key to deduplicate
                             }
                         }
@@ -79,7 +91,7 @@ class TranslatableStringScanner
             }
         }
 
-        return count($strings);
+        return array_keys($strings);
     }
 
     /**

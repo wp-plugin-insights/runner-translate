@@ -43,8 +43,9 @@ class TranslationFileParser
         // Get text domain from plugin code
         $textDomain = $this->findTextDomain($pluginPath);
 
-        // Count actual translatable strings from PHP code
-        $totalStrings = $this->scanner->countTranslatableStrings($pluginPath, $textDomain);
+        // Extract actual translatable strings from PHP code
+        $codeStrings = $this->scanner->extractTranslatableStrings($pluginPath, $textDomain);
+        $totalStrings = count($codeStrings);
 
         // If scanning failed, fallback to .pot file count
         if ($totalStrings === 0) {
@@ -67,16 +68,53 @@ class TranslationFileParser
             $total = $totalStrings > 0 ? $totalStrings : $stats['total'];
             $percentage = $total > 0 ? round(($stats['translated'] / $total) * 100, 2) : 0;
 
+            // Identify missing strings by comparing code strings with .po file msgids
+            $missingStrings = [];
+            if (!empty($codeStrings)) {
+                $missingStrings = array_values(array_diff($codeStrings, $stats['msgids']));
+            }
+
             $locales[$locale] = [
                 'name' => $this->getLocaleName($locale),
                 'percentage' => $percentage,
                 'translated' => $stats['translated'],
                 'waiting' => 0,
                 'total' => $total,
+                'untranslated_in_file' => count($stats['untranslated']),
+                'missing_from_file' => count($missingStrings),
+                'confidence' => $this->calculateConfidence($codeStrings, $stats),
             ];
         }
 
         return $locales;
+    }
+
+    /**
+     * Calculate confidence score for translation accuracy.
+     *
+     * @param array<string> $codeStrings
+     * @param array{msgids: array<string>, total: int} $poStats
+     * @return string
+     */
+    private function calculateConfidence(array $codeStrings, array $poStats): string
+    {
+        if (empty($codeStrings)) {
+            return 'low'; // No code strings found to compare
+        }
+
+        $codeCount = count($codeStrings);
+        $poCount = $poStats['total'];
+
+        // Calculate how well the .po file matches the code
+        $matchRatio = $codeCount > 0 ? $poCount / $codeCount : 0;
+
+        if ($matchRatio >= 0.95 && $matchRatio <= 1.05) {
+            return 'high'; // .po file matches code strings closely
+        } elseif ($matchRatio >= 0.85 && $matchRatio <= 1.15) {
+            return 'medium'; // Some discrepancy but reasonable
+        } else {
+            return 'low'; // Significant mismatch
+        }
     }
 
     /**
@@ -212,16 +250,21 @@ class TranslationFileParser
      * Parse a .po file to extract translation statistics.
      *
      * @param string $poFile
-     * @return array{translated: int, total: int}
+     * @return array{translated: int, total: int, msgids: array<string>, untranslated: array<string>}
      */
     private function parsePoFile(string $poFile): array
     {
         $content = @file_get_contents($poFile);
         if ($content === false) {
-            return ['translated' => 0, 'total' => 0];
+            return ['translated' => 0, 'total' => 0, 'msgids' => [], 'untranslated' => []];
         }
 
-        $stats = ['translated' => 0, 'total' => 0];
+        $stats = [
+            'translated' => 0,
+            'total' => 0,
+            'msgids' => [],
+            'untranslated' => []
+        ];
 
         // Split into entries by blank lines
         $entries = preg_split('/\n\n+/', $content);
@@ -242,13 +285,19 @@ class TranslationFileParser
                 continue;
             }
 
+            $msgid = $msgidMatch[1];
             $stats['total']++;
+            $stats['msgids'][] = $msgid;
 
             // Check if there's a non-empty msgstr
             if (preg_match('/^msgstr\s+"(.+)"/m', $entry, $msgstrMatch)) {
                 if (!empty($msgstrMatch[1])) {
                     $stats['translated']++;
+                } else {
+                    $stats['untranslated'][] = $msgid;
                 }
+            } else {
+                $stats['untranslated'][] = $msgid;
             }
         }
 
