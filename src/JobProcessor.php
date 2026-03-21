@@ -16,7 +16,9 @@ class JobProcessor
         private readonly TranslationFileParser $fileParser = new TranslationFileParser(),
         private readonly UntranslatedStringScanner $untranslatedScanner = new UntranslatedStringScanner(),
         private readonly TextDomainValidator $textDomainValidator = new TextDomainValidator(),
-        private readonly JavaScriptI18nScanner $jsI18nScanner = new JavaScriptI18nScanner()
+        private readonly JavaScriptI18nScanner $jsI18nScanner = new JavaScriptI18nScanner(),
+        private readonly LoadHookValidator $loadHookValidator = new LoadHookValidator(),
+        private readonly TranslationBestPractices $bestPractices = new TranslationBestPractices()
     ) {
     }
 
@@ -84,6 +86,12 @@ class JobProcessor
 
         // Scan JavaScript files for i18n
         $jsI18nResult = $this->jsI18nScanner->scan($job->src, $textDomainValidation['declared']);
+
+        // Validate load hook usage
+        $loadHookResult = $this->loadHookValidator->validate($job->src);
+
+        // Check translation best practices
+        $bestPracticesResult = $this->bestPractices->check($job->src);
 
         $compliantLocales = $this->scorer->getCompliantLocales($locales);
         $score = $this->scorer->calculateScore($locales);
@@ -217,6 +225,80 @@ class JobProcessor
             }
         }
 
+        // Load hook validation issues
+        if (!empty($loadHookResult['issues'])) {
+            $issuesMedium += count($loadHookResult['issues']);
+            foreach ($loadHookResult['issues'] as $issue) {
+                $topIssues[] = [
+                    'code' => 'i18n.load_hook',
+                    'message' => $issue,
+                    'severity' => 'medium',
+                ];
+            }
+        }
+
+        // Translation best practices issues
+        if ($bestPracticesResult['total_issues'] > 0) {
+            // Wrong function usage (high severity)
+            if (!empty($bestPracticesResult['wrong_function_usage'])) {
+                $issuesHigh += count($bestPracticesResult['wrong_function_usage']);
+                $topIssues[] = [
+                    'code' => 'i18n.wrong_function',
+                    'message' => sprintf(
+                        '%d incorrect translation function usage',
+                        count($bestPracticesResult['wrong_function_usage'])
+                    ),
+                    'severity' => 'high',
+                    'examples' => array_slice($bestPracticesResult['wrong_function_usage'], 0, 5),
+                ];
+            }
+
+            // Wrong placeholder usage (medium severity)
+            if (!empty($bestPracticesResult['wrong_placeholder'])) {
+                $issuesMedium += count($bestPracticesResult['wrong_placeholder']);
+                $topIssues[] = [
+                    'code' => 'i18n.wrong_placeholder',
+                    'message' => sprintf(
+                        '%d incorrect sprintf placeholder%s',
+                        count($bestPracticesResult['wrong_placeholder']),
+                        count($bestPracticesResult['wrong_placeholder']) === 1 ? '' : 's'
+                    ),
+                    'severity' => 'medium',
+                    'examples' => array_slice($bestPracticesResult['wrong_placeholder'], 0, 5),
+                ];
+            }
+
+            // Missing context (low severity)
+            if (!empty($bestPracticesResult['missing_context'])) {
+                $issuesLow += count($bestPracticesResult['missing_context']);
+                $topIssues[] = [
+                    'code' => 'i18n.missing_context',
+                    'message' => sprintf(
+                        '%d ambiguous string%s without context',
+                        count($bestPracticesResult['missing_context']),
+                        count($bestPracticesResult['missing_context']) === 1 ? '' : 's'
+                    ),
+                    'severity' => 'low',
+                    'examples' => array_slice($bestPracticesResult['missing_context'], 0, 5),
+                ];
+            }
+
+            // Missing translator comments (trivial severity)
+            if (!empty($bestPracticesResult['missing_translator_comments'])) {
+                $issuesTrivial += count($bestPracticesResult['missing_translator_comments']);
+                $topIssues[] = [
+                    'code' => 'i18n.missing_translator_comment',
+                    'message' => sprintf(
+                        '%d translation%s with placeholders missing translator comments',
+                        count($bestPracticesResult['missing_translator_comments']),
+                        count($bestPracticesResult['missing_translator_comments']) === 1 ? '' : 's'
+                    ),
+                    'severity' => 'trivial',
+                    'examples' => array_slice($bestPracticesResult['missing_translator_comments'], 0, 5),
+                ];
+            }
+        }
+
         $issues = [
             'high' => $issuesHigh,
             'medium' => $issuesMedium,
@@ -272,6 +354,8 @@ class JobProcessor
                 'untranslated_strings' => $untranslatedResult,
                 'text_domain' => $textDomainValidation,
                 'javascript_i18n' => $jsI18nResult,
+                'load_hook' => $loadHookResult,
+                'best_practices' => $bestPracticesResult,
             ],
             metrics: [
                 'detected' => count($locales),
@@ -282,6 +366,9 @@ class JobProcessor
                 'js_has_translations' => $jsI18nResult['has_translations'],
                 'js_total_strings' => $jsI18nResult['total_js_strings'],
                 'js_translated' => $jsI18nResult['total_translated'],
+                'load_hook_has_call' => $loadHookResult['has_load_call'],
+                'load_hook_issues' => count($loadHookResult['issues']),
+                'best_practices_issues' => $bestPracticesResult['total_issues'],
             ],
             capabilities: [
                 'supported_locales' => $compliantLocales,
