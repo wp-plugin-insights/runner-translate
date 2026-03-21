@@ -13,7 +13,8 @@ class JobProcessor
         private readonly Config $config,
         private readonly ReportBuilder $reportBuilder = new ReportBuilder(),
         private readonly TranslationScorer $scorer = new TranslationScorer(),
-        private readonly TranslationFileParser $fileParser = new TranslationFileParser()
+        private readonly TranslationFileParser $fileParser = new TranslationFileParser(),
+        private readonly UntranslatedStringScanner $untranslatedScanner = new UntranslatedStringScanner()
     ) {
     }
 
@@ -58,6 +59,7 @@ class JobProcessor
     private function doAction(Job $job): array
     {
         $locales = [];
+        $translatedStrings = [];
 
         // For wordpress.org plugins, fetch from translate.wordpress.org
         if ($job->source === 'wordpress.org') {
@@ -66,6 +68,14 @@ class JobProcessor
             // For other sources, scan local translation files
             $locales = $this->fileParser->scanPluginDirectory($job->src);
         }
+
+        // Get list of translated strings from the file parser
+        $textDomain = $this->fileParser->findTextDomainPublic($job->src);
+        $scanner = $this->fileParser->getScanner();
+        $translatedStrings = $scanner->extractTranslatableStrings($job->src, $textDomain);
+
+        // Scan for untranslated user-facing strings
+        $untranslatedResult = $this->untranslatedScanner->findUntranslatedStrings($job->src, $translatedStrings);
 
         $compliantLocales = $this->scorer->getCompliantLocales($locales);
         $score = $this->scorer->calculateScore($locales);
@@ -79,31 +89,79 @@ class JobProcessor
             ];
         }
 
+        // Build issues array
+        $issues = [];
+        if ($untranslatedResult['count'] > 0) {
+            $issues[] = [
+                'type' => 'untranslated_strings',
+                'severity' => 'warning',
+                'message' => sprintf(
+                    'Found %d user-facing string%s that should be translatable but %s not wrapped in translation functions.',
+                    $untranslatedResult['count'],
+                    $untranslatedResult['count'] === 1 ? '' : 's',
+                    $untranslatedResult['count'] === 1 ? 'is' : 'are'
+                ),
+                'count' => $untranslatedResult['count'],
+                'examples' => array_slice($untranslatedResult['strings'], 0, 5), // Show first 5 examples
+            ];
+        }
+
+        $presentation = [
+            'supported_locales' => $this->reportBuilder->createList(
+                'Supported locales (80%+ translated)',
+                $compliantLocales
+            ),
+            'coverage_by_locale' => $this->reportBuilder->createTable(
+                'Coverage by locale',
+                [
+                    ['key' => 'local', 'label' => 'Locale'],
+                    ['key' => 'name', 'label' => 'Name'],
+                    ['key' => 'percentage', 'label' => 'Coverage %'],
+                ],
+                $tableRows
+            ),
+        ];
+
+        // Add untranslated strings table if there are any
+        if ($untranslatedResult['count'] > 0) {
+            $untranslatedRows = [];
+            foreach (array_slice($untranslatedResult['strings'], 0, 10) as $item) {
+                $untranslatedRows[] = [
+                    'string' => strlen($item['string']) > 50
+                        ? substr($item['string'], 0, 47) . '...'
+                        : $item['string'],
+                    'file' => $item['file'],
+                    'line' => $item['line'],
+                ];
+            }
+
+            $presentation['untranslated_strings'] = $this->reportBuilder->createTable(
+                'Untranslated Strings (first 10)',
+                [
+                    ['key' => 'string', 'label' => 'String'],
+                    ['key' => 'file', 'label' => 'File'],
+                    ['key' => 'line', 'label' => 'Line'],
+                ],
+                $untranslatedRows
+            );
+        }
+
         return $this->reportBuilder->build(
             score: $score,
-            details: ['locales' => $locales],
+            details: [
+                'locales' => $locales,
+                'untranslated_strings' => $untranslatedResult,
+            ],
             metrics: [
                 'detected' => count($locales),
                 'complaints' => count($compliantLocales),
+                'untranslated_strings' => $untranslatedResult['count'],
             ],
             capabilities: [
                 'supported_locales' => $compliantLocales,
             ],
-            presentation: [
-                'supported_locales' => $this->reportBuilder->createList(
-                    'Supported locales (80%+ translated)',
-                    $compliantLocales
-                ),
-                'coverage_by_locale' => $this->reportBuilder->createTable(
-                    'Coverage by locale',
-                    [
-                        ['key' => 'local', 'label' => 'Locale'],
-                        ['key' => 'name', 'label' => 'Name'],
-                        ['key' => 'percentage', 'label' => 'Coverage %'],
-                    ],
-                    $tableRows
-                ),
-            ]
+            presentation: $presentation,
+            issues: $issues
         );
     }
 

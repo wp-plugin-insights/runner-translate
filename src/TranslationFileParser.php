@@ -12,6 +12,27 @@ class TranslationFileParser
     }
 
     /**
+     * Get the scanner instance.
+     *
+     * @return TranslatableStringScanner
+     */
+    public function getScanner(): TranslatableStringScanner
+    {
+        return $this->scanner;
+    }
+
+    /**
+     * Public wrapper for findTextDomain.
+     *
+     * @param string $pluginPath
+     * @return string|null
+     */
+    public function findTextDomainPublic(string $pluginPath): ?string
+    {
+        return $this->findTextDomain($pluginPath);
+    }
+
+    /**
      * Scan a plugin directory for translation files and extract locale data.
      *
      * @param string $pluginPath
