@@ -1,6 +1,6 @@
 {
-  "name": "wp-plugin-insights/runner-dummy",
-  "description": "Dummy RabbitMQ runner for WordPress plugin insights",
+  "name": "wp-plugin-insights/runner-translate",
+  "description": "Localisation runner for WordPress plugin insights",
   "type": "project",
   "require": {
     "php": "^8.2",
