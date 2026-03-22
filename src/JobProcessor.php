@@ -118,16 +118,7 @@ class JobProcessor
 
             foreach ($textDomainValidation['issues'] as $issue) {
                 // Classify by severity
-                if (strpos($issue, 'No text domain declared') !== false) {
-                    // High for wordpress.org, medium for others
-                    if ($isWordPressOrg) {
-                        $issuesHigh++;
-                        $severity = 'high';
-                    } else {
-                        $issuesMedium++;
-                        $severity = 'medium';
-                    }
-                } elseif (strpos($issue, 'does not match plugin slug') !== false) {
+                if (strpos($issue, 'does not match plugin slug') !== false) {
                     // High for wordpress.org, medium for others
                     if ($isWordPressOrg) {
                         $issuesHigh++;

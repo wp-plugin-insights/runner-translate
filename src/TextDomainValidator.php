@@ -102,9 +102,9 @@ class TextDomainValidator
         }
 
         // Build issues list
-        if ($declaredDomain === null) {
-            $issues[] = 'No text domain declared in plugin header';
-        } elseif ($declaredDomain !== $expectedDomain) {
+        // Note: Text Domain header is optional since WordPress 4.6
+        // WordPress automatically uses plugin slug if header is missing
+        if ($declaredDomain !== null && $declaredDomain !== $expectedDomain) {
             $issues[] = sprintf(
                 'Declared text domain "%s" does not match plugin slug "%s"',
                 $declaredDomain,

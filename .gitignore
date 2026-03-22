@@ -2,4 +2,5 @@
 /.idea/
 /.vscode/
 .env
+/fair-plugin-main
 .DS_Store

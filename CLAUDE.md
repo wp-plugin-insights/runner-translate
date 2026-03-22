@@ -127,7 +127,7 @@ All validators follow this pattern:
 
 - **LoadHookValidator** - Searches backwards in code to find `add_action()` context for `load_plugin_textdomain()` calls
 - **TranslationBestPractices** - Multiple regex-based checks for wrong function usage, missing escaping, placeholders, contexts
-- **TextDomainValidator** - Extracts text domain parameter from function calls using `getTextDomainParameter()`, tracks usage
+- **TextDomainValidator** - Extracts text domain parameter from function calls using `getTextDomainParameter()`, tracks usage. Note: Text Domain header is optional since WordPress 4.6 (WordPress uses plugin slug automatically)
 - **JavaScriptI18nScanner** - Dual-mode regex patterns for `wp.i18n.__()` and destructured `__()` forms
 - **UntranslatedStringScanner** - **Very conservative** - only checks specific contexts (wp_die, WP_Error, etc.) to minimize false positives
 - **TranslationFileParser** - Finds `load_plugin_textdomain()` to determine registered translation directory, parses .po files
@@ -150,4 +150,4 @@ load_plugin_textdomain('domain', false, dirname(plugin_basename(__FILE__)) . '/l
 
 ## Severity Levels
 
-Issue severity varies by plugin source. Text domain issues are HIGH severity for wordpress.org plugins (strict requirement) but MEDIUM for others. See JobProcessor's `doAction()` method for the full mapping.
+Issue severity varies by plugin source. Text domain mismatch (when header is declared but doesn't match plugin slug) is HIGH severity for wordpress.org plugins but MEDIUM for others. Missing Text Domain header is NOT an issue since WordPress 4.6 automatically uses the plugin slug. See JobProcessor's `doAction()` method for the full mapping.
