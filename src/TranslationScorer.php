@@ -8,18 +8,133 @@ class TranslationScorer
 {
     /**
      * The main locales to evaluate translation quality against.
+     * Used for informational "global reach" metrics, not for scoring.
      */
     private const MAJOR_LOCALES = [
         'de_DE', 'fr_FR', 'es_ES', 'it_IT', 'pt_BR', 'ja', 'zh_CN', 'nl_NL', 'ru_RU', 'ko_KR',
     ];
 
     /**
-     * Calculate the translation score and grade.
+     * Calculate the i18n implementation score and grade.
+     * Score is based on code quality, NOT translation coverage.
      *
-     * @param array<string, array<string, mixed>> $locales
+     * @param int $highIssues
+     * @param int $mediumIssues
+     * @param int $lowIssues
+     * @param float $textDomainConsistency Percentage 0-100
+     * @param bool $hasTranslatableStrings Whether plugin has any translatable strings
      * @return array{grade: string, percentage: float, reasoning: string}
      */
-    public function calculateScore(array $locales): array
+    public function calculateScore(
+        int $highIssues,
+        int $mediumIssues,
+        int $lowIssues,
+        float $textDomainConsistency,
+        bool $hasTranslatableStrings
+    ): array
+    {
+        // If the plugin has no translatable strings, it's not i18n-ready
+        if (!$hasTranslatableStrings) {
+            return [
+                'grade' => 'F',
+                'percentage' => 0.0,
+                'reasoning' => 'The plugin has no translatable strings. All user-facing text should be wrapped in translation functions.',
+            ];
+        }
+
+        // Calculate base score from 100, deducting points for issues
+        $baseScore = 100.0;
+
+        // High severity issues: -15 points each (critical problems)
+        $baseScore -= ($highIssues * 15);
+
+        // Medium severity issues: -5 points each (important problems)
+        $baseScore -= ($mediumIssues * 5);
+
+        // Low severity issues: -2 points each (minor problems)
+        $baseScore -= ($lowIssues * 2);
+
+        // Text domain consistency affects score (0-10 point bonus)
+        // 100% consistency = +10 points, 0% = -10 points
+        $consistencyBonus = ($textDomainConsistency / 100 * 20) - 10;
+        $baseScore += $consistencyBonus;
+
+        // Ensure score stays within 0-100 range
+        $finalScore = max(0.0, min(100.0, $baseScore));
+
+        // Determine grade based on final score
+        $grade = match (true) {
+            $finalScore >= 95 && $highIssues === 0 && $mediumIssues <= 1 => 'A+',
+            $finalScore >= 90 && $highIssues === 0 && $mediumIssues <= 2 => 'A',
+            $finalScore >= 80 && $highIssues === 0 => 'B',
+            $finalScore >= 70 && $highIssues <= 1 => 'C',
+            $finalScore >= 50 => 'D',
+            default => 'F',
+        };
+
+        // Build reasoning based on grade and issues
+        $issuesSummary = [];
+        if ($highIssues > 0) {
+            $issuesSummary[] = sprintf('%d high severity issue%s', $highIssues, $highIssues === 1 ? '' : 's');
+        }
+        if ($mediumIssues > 0) {
+            $issuesSummary[] = sprintf('%d medium severity issue%s', $mediumIssues, $mediumIssues === 1 ? '' : 's');
+        }
+        if ($lowIssues > 0) {
+            $issuesSummary[] = sprintf('%d low severity issue%s', $lowIssues, $lowIssues === 1 ? '' : 's');
+        }
+
+        $reasoning = match ($grade) {
+            'A+' => sprintf(
+                'Excellent i18n implementation with %.1f%% text domain consistency and minimal issues. The code follows WordPress translation best practices.',
+                $textDomainConsistency
+            ),
+            'A' => sprintf(
+                'Very good i18n implementation with %.1f%% text domain consistency. %s detected but overall quality is strong.',
+                $textDomainConsistency,
+                implode(' and ', $issuesSummary) ?: 'Minor issues'
+            ),
+            'B' => sprintf(
+                'Good i18n implementation with %.1f%% text domain consistency, but improvements needed. Issues: %s.',
+                $textDomainConsistency,
+                implode(', ', $issuesSummary) ?: 'Some problems detected'
+            ),
+            'C' => sprintf(
+                'Moderate i18n implementation (%.1f%% text domain consistency). Several issues need attention: %s.',
+                $textDomainConsistency,
+                implode(', ', $issuesSummary) ?: 'Multiple problems'
+            ),
+            'D' => sprintf(
+                'Poor i18n implementation (%.1f%% text domain consistency) with significant issues: %s.',
+                $textDomainConsistency,
+                implode(', ', $issuesSummary) ?: 'Many problems'
+            ),
+            'F' => sprintf(
+                'Critical i18n implementation problems (%.1f%% text domain consistency). Issues: %s. Major refactoring needed.',
+                $textDomainConsistency,
+                implode(', ', $issuesSummary) ?: 'Severe problems'
+            ),
+        };
+
+        return [
+            'grade' => $grade,
+            'percentage' => round($finalScore, 2),
+            'reasoning' => $reasoning,
+        ];
+    }
+
+    /**
+     * Calculate translation coverage metrics (informational only).
+     *
+     * @param array<string, array<string, mixed>> $locales
+     * @return array{
+     *   total_locales: int,
+     *   compliant_locales: int,
+     *   major_locale_coverage: float,
+     *   compliant_locale_list: array<string>
+     * }
+     */
+    public function calculateCoverageMetrics(array $locales): array
     {
         $compliantLocales = $this->getCompliantLocales($locales);
 
@@ -30,97 +145,21 @@ class TranslationScorer
             ARRAY_FILTER_USE_BOTH
         );
 
-        $majorCompliant = array_filter(
-            $compliantLocales,
-            fn(string $locale) => $this->isMajorLocale($locale)
-        );
-
-        $nonMajorCompliant = array_filter(
-            $compliantLocales,
-            fn(string $locale) => !$this->isMajorLocale($locale)
-        );
-
-        // Get the found major locale codes
-        $foundMajorLocales = array_keys($majorResults);
-
-        $majorNonCompliant = array_diff(self::MAJOR_LOCALES, $majorCompliant);
-        $missingMajor = array_diff(self::MAJOR_LOCALES, $foundMajorLocales);
-        $belowThreshold = array_diff($majorNonCompliant, $missingMajor);
-
-        if (count($majorResults) === 0) {
-            return [
-                'grade' => 'F',
-                'percentage' => 0.0,
-                'reasoning' => 'No translation data available for any of the major locales (' . implode(', ', self::MAJOR_LOCALES) . ').',
-            ];
-        }
-
         $totalPercentage = 0.0;
         foreach ($majorResults as $data) {
             $totalPercentage += (float) $data['percentage'];
         }
 
-        // Score is based on coverage of all major locales, not just those with data
-        $averagePercentage = round($totalPercentage / count(self::MAJOR_LOCALES), 2);
-        $compliantRatio = count($majorCompliant) / count(self::MAJOR_LOCALES) * 100;
-
-        $grade = match (true) {
-            $averagePercentage >= 90 && $compliantRatio >= 80 => 'A',
-            $averagePercentage >= 75 && $compliantRatio >= 60 => 'B',
-            $averagePercentage >= 50 && $compliantRatio >= 40 => 'C',
-            $averagePercentage >= 25 => 'D',
-            default => 'F',
-        };
-
-        // Promote to A+ when the plugin qualifies for A and has 20+ additional compliant locales beyond the major ones
-        if ($grade === 'A' && count($nonMajorCompliant) >= 20) {
-            $grade = 'A+';
-        }
-
-        $majorLocaleCount = count(self::MAJOR_LOCALES);
-        $majorDataCount = count($majorResults);
-        $majorCompliantCount = count($majorCompliant);
-        $nonMajorCompliantCount = count($nonMajorCompliant);
-
-        $issueDetail = '';
-        if (count($belowThreshold) > 0) {
-            $issueDetail .= ' Locales below 80%: ' . implode(', ', array_values($belowThreshold)) . '.';
-        }
-        if (count($missingMajor) > 0) {
-            $issueDetail .= ' Missing locales: ' . implode(', ', array_values($missingMajor)) . '.';
-        }
-
-        $reasoning = match ($grade) {
-            'A+' => sprintf(
-                'The plugin is exceptionally well translated with an average of %.1f%% coverage across %d major locales (%d of %d present), %d out of %d major locales are above 80%% translated, and %d additional locales also exceed 80%%.',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $majorCompliantCount, $majorLocaleCount, $nonMajorCompliantCount
-            ),
-            'A' => sprintf(
-                'The plugin is well translated with an average of %.1f%% coverage across %d major locales (%d of %d present), and %d out of %d are above 80%% translated.',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $majorCompliantCount, $majorLocaleCount
-            ),
-            'B' => sprintf(
-                'The plugin has good translation coverage with an average of %.1f%% across %d major locales (%d of %d present), but some still need improvement.%s',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
-            ),
-            'C' => sprintf(
-                'The plugin has moderate translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Many need additional translations.%s',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
-            ),
-            'D' => sprintf(
-                'The plugin has limited translation coverage with an average of %.1f%% across %d major locales (%d of %d present). Most need significant work.%s',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
-            ),
-            'F' => sprintf(
-                'The plugin has very poor translation coverage with an average of %.1f%% across %d major locales (%d of %d present).%s',
-                $averagePercentage, $majorLocaleCount, $majorDataCount, $majorLocaleCount, $issueDetail
-            ),
-        };
+        // Average coverage across major locales (0 if none present)
+        $averageMajorCoverage = count($majorResults) > 0
+            ? round($totalPercentage / count($majorResults), 2)
+            : 0.0;
 
         return [
-            'grade' => $grade,
-            'percentage' => $averagePercentage,
-            'reasoning' => $reasoning,
+            'total_locales' => count($locales),
+            'compliant_locales' => count($compliantLocales),
+            'major_locale_coverage' => $averageMajorCoverage,
+            'compliant_locale_list' => $compliantLocales,
         ];
     }
 

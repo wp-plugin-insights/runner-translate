@@ -146,9 +146,24 @@ class UntranslatedStringScanner
             }
         }
 
-        // PHP short echo tags
-        if (preg_match('/^<\?=/', $string)) {
-            return true; // <?= esc_attr(...)
+        // PHP code in strings
+        if (preg_match('/<\?(?:php|=)/', $string)) {
+            return true; // <?php echo ... or <?= ...
+        }
+
+        // String concatenation fragments (contains . $ or $ . or . ")
+        if (preg_match('/(\.\s*\$|\$\s*\.|^\s*\.\s+|\s+\.\s*$)/', $string)) {
+            return true; // " . $var" or "$var . " or ". something" or "something ."
+        }
+
+        // Regex patterns (starts with % or # and has regex-like syntax)
+        if (preg_match('/^[%#\/].*[%#\/][a-z]*$/i', $string)) {
+            return true; // %pattern%s or #pattern# or /pattern/i
+        }
+
+        // Function calls in strings (contains "function(")
+        if (preg_match('/[a-z_]+\s*\(/i', $string)) {
+            return true; // "esc_html($this->get(" or "is_active() ?"
         }
 
         // Any string containing HTML tags (without actual text content)
@@ -164,8 +179,9 @@ class UntranslatedStringScanner
         }
 
         // CSS class names (usually not translatable)
-        if (preg_match('/^[a-z][a-z0-9-]*(\s+[a-z][a-z0-9-]*)*$/', $string) && strlen($string) < 50) {
-            return true; // wordpress-news hide-if-no-js
+        // Matches: "class-name", "class-name another-class", " class-name", "class-name "
+        if (preg_match('/^\s*[a-z][a-z0-9-]*(\s+[a-z][a-z0-9-]*)*\s*$/i', $string) && strlen($string) < 50) {
+            return true; // wordpress-news hide-if-no-js, " has-free-text", "mailtag code "
         }
 
         // Single word technical terms

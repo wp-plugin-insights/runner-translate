@@ -93,19 +93,7 @@ class JobProcessor
         // Check translation best practices
         $bestPracticesResult = $this->bestPractices->check($job->src);
 
-        $compliantLocales = $this->scorer->getCompliantLocales($locales);
-        $score = $this->scorer->calculateScore($locales);
-
-        $tableRows = [];
-        foreach ($locales as $locale => $data) {
-            $tableRows[] = [
-                'local' => $locale,
-                'name' => $data['name'],
-                'percentage' => $data['percentage'] . '%',
-            ];
-        }
-
-        // Build issues object
+        // Build issues object (calculate score after issues are tallied)
         $issuesHigh = 0;
         $issuesMedium = 0;
         $issuesLow = 0;
@@ -298,13 +286,36 @@ class JobProcessor
             'top' => $topIssues,
         ];
 
+        // Calculate i18n implementation score (based on code quality, not translation coverage)
+        $hasTranslatableStrings = count($translatedStrings) > 0;
+        $score = $this->scorer->calculateScore(
+            $issuesHigh,
+            $issuesMedium,
+            $issuesLow,
+            $textDomainValidation['consistency_score'],
+            $hasTranslatableStrings
+        );
+
+        // Calculate translation coverage metrics (informational only)
+        $coverageMetrics = $this->scorer->calculateCoverageMetrics($locales);
+        $compliantLocales = $coverageMetrics['compliant_locale_list'];
+
+        $tableRows = [];
+        foreach ($locales as $locale => $data) {
+            $tableRows[] = [
+                'local' => $locale,
+                'name' => $data['name'],
+                'percentage' => $data['percentage'] . '%',
+            ];
+        }
+
         $presentation = [
             'supported_locales' => $this->reportBuilder->createList(
                 'Supported locales (80%+ translated)',
                 $compliantLocales
             ),
             'coverage_by_locale' => $this->reportBuilder->createTable(
-                'Coverage by locale',
+                'Translation Coverage by Locale (informational)',
                 [
                     ['key' => 'local', 'label' => 'Locale'],
                     ['key' => 'name', 'label' => 'Name'],
@@ -349,17 +360,25 @@ class JobProcessor
                 'best_practices' => $bestPracticesResult,
             ],
             metrics: [
-                'detected' => count($locales),
-                'compliant' => count($compliantLocales),
-                'untranslated_strings' => $untranslatedResult['count'],
+                // Code quality metrics (affect score)
+                'has_translatable_strings' => $hasTranslatableStrings,
                 'text_domain_consistency' => $textDomainValidation['consistency_score'],
                 'text_domain_valid' => $textDomainValidation['is_valid'],
+                'issues_high' => $issuesHigh,
+                'issues_medium' => $issuesMedium,
+                'issues_low' => $issuesLow,
+                'issues_trivial' => $issuesTrivial,
+                'untranslated_strings' => $untranslatedResult['count'],
                 'js_has_translations' => $jsI18nResult['has_translations'],
                 'js_total_strings' => $jsI18nResult['total_js_strings'],
                 'js_translated' => $jsI18nResult['total_translated'],
                 'load_hook_has_call' => $loadHookResult['has_load_call'],
                 'load_hook_issues' => count($loadHookResult['issues']),
                 'best_practices_issues' => $bestPracticesResult['total_issues'],
+                // Translation coverage metrics (informational only, do not affect score)
+                'translation_locales_detected' => $coverageMetrics['total_locales'],
+                'translation_locales_compliant' => $coverageMetrics['compliant_locales'],
+                'translation_major_locale_coverage' => $coverageMetrics['major_locale_coverage'],
             ],
             capabilities: [
                 'supported_locales' => $compliantLocales,

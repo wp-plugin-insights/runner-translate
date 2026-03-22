@@ -96,8 +96,13 @@ class TextDomainValidator
         // Calculate consistency score
         $totalUsages = array_sum($domainUsage);
         $consistencyScore = 0.0;
-        if ($totalUsages > 0 && $declaredDomain) {
-            $correctUsages = $domainUsage[$declaredDomain] ?? 0;
+
+        // Use declared domain if present, otherwise fall back to expected (plugin slug)
+        // This handles WordPress 4.6+ where Text Domain header is optional
+        $targetDomain = $declaredDomain ?? $expectedDomain;
+
+        if ($totalUsages > 0 && $targetDomain) {
+            $correctUsages = $domainUsage[$targetDomain] ?? 0;
             $consistencyScore = round(($correctUsages / $totalUsages) * 100, 2);
         }
 

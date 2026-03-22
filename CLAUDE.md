@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-This runner analyzes WordPress plugin translation quality. It's the reference implementation for the `runner-NNNN` pattern in the wp-plugin-insights project.
+This runner analyzes WordPress plugin i18n (internationalization) implementation quality. The score is based on code quality (proper translation function usage, text domain consistency, etc.), NOT on translation coverage. Translation availability is tracked separately as informational metrics.
 
 ## Architecture
 
@@ -30,9 +30,11 @@ RabbitMQ → Application → Runner → JobProcessor → Validators → ReportBu
    - Accepts: score, metrics, capabilities, issues, details, presentation
    - Does NOT contain translation-specific logic
 
-4. **TranslationScorer** - Translation-specific scoring
-   - Defines major locales: de_DE, fr_FR, es_ES, it_IT, pt_BR, ja, zh_CN, nl_NL, ru_RU, ko_KR
-   - Calculates grades (A+, A, B, C, D, F) based on coverage
+4. **TranslationScorer** - i18n implementation scoring
+   - Calculates grades (A+, A, B, C, D, F) based on CODE QUALITY, not translation coverage
+   - Scoring factors: issue counts (high/medium/low), text domain consistency, presence of translatable strings
+   - Also provides informational coverage metrics: total locales, compliant locales (80%+), major locale coverage
+   - Major locales (for info only): de_DE, fr_FR, es_ES, it_IT, pt_BR, ja, zh_CN, nl_NL, ru_RU, ko_KR
 
 5. **Validators** - Modular checks following a common pattern
    - Each validator is independent and returns structured data
@@ -147,6 +149,36 @@ load_plugin_textdomain('domain', false, dirname(plugin_basename(__FILE__)) . '/l
 ```
 
 **ReportBuilder Contract:** Must remain generic. Translation-specific logic goes in TranslationScorer or JobProcessor, never in ReportBuilder.
+
+## Scoring System
+
+**Primary Score: i18n Implementation Quality (Code-Based)**
+
+The main score is based on code implementation quality, NOT on whether translations exist. This ensures plugins with perfect i18n code get high scores regardless of their target market.
+
+**Scoring Formula:**
+- Base score: 100 points
+- High severity issues: -15 points each (critical problems like wrong function usage)
+- Medium severity issues: -5 points each (important problems like missing hooks, text domain issues)
+- Low severity issues: -2 points each (minor problems like missing context)
+- Text domain consistency: -10 to +10 points (100% consistency = +10, 0% = -10)
+
+**Grade Thresholds:**
+- **A+**: 95+ score, 0 high issues, ≤1 medium issue
+- **A**: 90+ score, 0 high issues, ≤2 medium issues
+- **B**: 80+ score, 0 high issues
+- **C**: 70+ score, ≤1 high issue
+- **D**: 50+ score
+- **F**: <50 score or critical implementation problems
+
+**Secondary Metrics: Translation Coverage (Informational Only)**
+
+Translation availability is tracked but does NOT affect the score:
+- Total locales detected
+- Compliant locales (80%+ translated)
+- Major locale coverage (average % for de_DE, fr_FR, es_ES, etc.)
+
+This allows a Dutch-only plugin with perfect i18n code to get an A+ grade while still showing it only has Dutch translations available.
 
 ## Severity Levels
 
